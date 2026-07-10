@@ -74,6 +74,7 @@ jobs:
             --cpu 1 \
             --cpu-boost \
             --set-secrets "MONGODB_URI=IMDB_MONGODB_URI:latest,POLICY_JWT_PRIVATE_KEY=POLICY_JWT_PRIVATE_KEY:latest,POLICY_ADMIN_TOKEN=POLICY_ADMIN_TOKEN:latest" \
+            --set-env-vars "^;^POLICY_REGISTRATION_ALLOWED_EMAILS=imdbfed-run@project-d60a83c1-2c60-4d51-ad0.iam.gserviceaccount.com;POLICY_REGISTRATION_AUDIENCE=https://imdb-policy-service-dkuqnmldta-uc.a.run.app" \
             --quiet
 
       - name: Smoke test

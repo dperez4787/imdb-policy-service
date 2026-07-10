@@ -27,5 +27,11 @@ policy:
   admin:
     # Empty -> /v1/admin/** is open (local dev only; startup logs a warning).
     token: ${POLICY_ADMIN_TOKEN:}
+  registration:
+    # CSV of Google identities (Cloud Run runtime SA emails) allowed to PUT
+    # registrations. Empty -> open (local dev only; startup logs a warning).
+    allowed-emails: ${POLICY_REGISTRATION_ALLOWED_EMAILS:}
+    # When set, registration ID tokens must carry this audience.
+    audience: ${POLICY_REGISTRATION_AUDIENCE:}
   seed:
     enabled: ${POLICY_SEED_ENABLED:true}
