@@ -3,3 +3,6 @@ target/
 *.iml
 .DS_Store
 .flattened-pom.xml
+infra/.terraform/
+infra/tfplan
+infra/*.tfstate*

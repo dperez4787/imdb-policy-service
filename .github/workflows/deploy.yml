@@ -1,0 +1,98 @@
+# Deploys imdb-policy-service to Cloud Run on push to main.
+# Terraform in infra/ owns SAs/WIF/AR/secret containers; this workflow owns
+# the Cloud Run service itself (same split as the rest of the estate).
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency: deploy-main
+
+env:
+  PROJECT_ID: project-d60a83c1-2c60-4d51-ad0
+  REGION: us-central1
+  AR_REPO: imdb-policy-service
+  SERVICE: imdb-policy-service
+  RUNTIME_SA: policysvc-run@project-d60a83c1-2c60-4d51-ad0.iam.gserviceaccount.com
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Tests (unit + Testcontainers IT)
+        run: ./mvnw -B verify
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/policy-service:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Public on purpose: the router fetches /v1/bundle and the JWKS without
+      # credentials, and demo clients mint persona tokens. Mutating surfaces
+      # are guarded in-app (POLICY_ADMIN_TOKEN).
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE }} \
+            --image "${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/policy-service:${{ github.sha }}" \
+            --region "${{ env.REGION }}" \
+            --project "${{ env.PROJECT_ID }}" \
+            --service-account "${{ env.RUNTIME_SA }}" \
+            --allow-unauthenticated \
+            --port 8080 \
+            --min-instances 0 \
+            --max-instances 2 \
+            --memory 512Mi \
+            --cpu 1 \
+            --cpu-boost \
+            --set-secrets "MONGODB_URI=IMDB_MONGODB_URI:latest,POLICY_JWT_PRIVATE_KEY=POLICY_JWT_PRIVATE_KEY:latest,POLICY_ADMIN_TOKEN=POLICY_ADMIN_TOKEN:latest" \
+            --quiet
+
+      - name: Smoke test
+        run: |
+          URL=$(gcloud run services describe ${{ env.SERVICE }} \
+            --region "${{ env.REGION }}" --project "${{ env.PROJECT_ID }}" \
+            --format 'value(status.url)')
+          echo "Policy service URL: $URL"
+
+          BUNDLE=$(curl -sf --retry 5 --retry-all-errors --max-time 120 "$URL/v1/bundle")
+          echo "$BUNDLE" | jq -e '.revision >= 1 and .defaultPosture == "allow-unless-governed"'
+
+          curl -sf "$URL/.well-known/jwks.json" | jq -e '.keys | length >= 1'
+
+          curl -sf -X POST "$URL/v1/token" -H 'Content-Type: application/json' \
+            -d '{"persona":"analyst"}' | jq -e '.token and (.roles | index("analyst"))'
+
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$URL/v1/admin/policies/Rating.numVotes" \
+            -H 'Content-Type: application/json' -d '{"allowedRoles":["analyst"]}')
+          [ "$CODE" = "401" ] || { echo "expected 401 on unauthenticated admin call, got $CODE"; exit 1; }
+
+          echo "Smoke OK: bundle, JWKS, token minting, admin gate"
