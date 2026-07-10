@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: imdb-policy-service
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/imdb_governance}
+      # Governance data lives in its own database even when the URI points at
+      # the shared Atlas cluster (whose default database is the imdb datasets).
+      database: ${MONGODB_DATABASE:imdb_governance}
+
+server:
+  port: ${PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+policy:
+  jwt:
+    issuer: ${POLICY_JWT_ISSUER:https://imdb-policy-service}
+    audience: ${POLICY_JWT_AUDIENCE:imdb-router}
+    ttl: ${POLICY_JWT_TTL:15m}
+    # PKCS#8 PEM. Empty -> ephemeral dev key (regenerated every boot).
+    private-key-pem: ${POLICY_JWT_PRIVATE_KEY:}
+  admin:
+    # Empty -> /v1/admin/** is open (local dev only; startup logs a warning).
+    token: ${POLICY_ADMIN_TOKEN:}
+  seed:
+    enabled: ${POLICY_SEED_ENABLED:true}
