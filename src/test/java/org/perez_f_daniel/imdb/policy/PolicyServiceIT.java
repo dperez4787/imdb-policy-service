@@ -253,6 +253,29 @@ class PolicyServiceIT {
         assertThat(actions).contains("persona.updated");
     }
 
+    // ---- UI support surfaces ----------------------------------------------
+
+    @Test
+    @Order(13)
+    void publicPersonaListExposesRolesButNeverSubjects() {
+        ResponseEntity<JsonNode> response = rest.getForEntity("/v1/personas", JsonNode.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        String body = response.getBody().toString();
+        assertThat(body).contains("analyst");
+        assertThat(body).doesNotContain("subjects");
+        assertThat(body).doesNotContain("perez.f.danny@gmail.com");
+    }
+
+    @Test
+    @Order(14)
+    void uiConfigAndStaticShellAreServed() {
+        assertThat(rest.getForEntity("/v1/ui-config", JsonNode.class).getBody().get("routerUrl").asText())
+                .startsWith("https://");
+        ResponseEntity<String> index = rest.getForEntity("/", String.class);
+        assertThat(index.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(index.getBody()).contains("IMDb Graph Governance");
+    }
+
     // ---- request builders --------------------------------------------------
 
     private static HttpHeaders jsonHeaders() {

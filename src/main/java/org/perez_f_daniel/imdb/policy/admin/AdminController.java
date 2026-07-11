@@ -62,6 +62,7 @@ public class AdminController {
 
     public record FieldOverview(String coordinate, String subgraph, String reason,
                                 GovernedField.Status status, String source,
+                                Instant firstSeenAt, Instant lastRegisteredAt,
                                 List<String> allowedRoles, boolean policyEnabled,
                                 Instant policyUpdatedAt, String policyUpdatedBy) {
     }
@@ -75,6 +76,7 @@ public class AdminController {
                     FieldPolicy p = byCoordinate.get(gf.getCoordinate());
                     return new FieldOverview(gf.getCoordinate(), gf.getSubgraph(), gf.getReason(),
                             gf.getStatus(), gf.getSource(),
+                            gf.getFirstSeenAt(), gf.getLastRegisteredAt(),
                             p == null ? List.of() : p.getAllowedRoles(),
                             p != null && p.isEnabled(),
                             p == null ? null : p.getUpdatedAt(),

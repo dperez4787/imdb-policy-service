@@ -35,3 +35,6 @@ policy:
     audience: ${POLICY_REGISTRATION_AUDIENCE:}
   seed:
     enabled: ${POLICY_SEED_ENABLED:true}
+  ui:
+    # The one router the playground proxy may target.
+    router-url: ${POLICY_UI_ROUTER_URL:https://cosmo-router-dkuqnmldta-uc.a.run.app}
