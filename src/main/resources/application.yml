@@ -31,8 +31,15 @@ policy:
     # CSV of Google identities (Cloud Run runtime SA emails) allowed to PUT
     # registrations. Empty -> open (local dev only; startup logs a warning).
     allowed-emails: ${POLICY_REGISTRATION_ALLOWED_EMAILS:}
-    # When set, registration ID tokens must carry this audience.
-    audience: ${POLICY_REGISTRATION_AUDIENCE:}
+  google-auth:
+    # When set, Google ID tokens (registrations, bundle principals) must
+    # carry this audience.
+    audience: ${POLICY_GOOGLE_AUTH_AUDIENCE:}
+  bundle:
+    # CSV of Google identities that receive the principals map (real emails)
+    # in /v1/bundle — in production, the router's runtime SA.
+    # Empty -> served to everyone (local dev only; startup logs a warning).
+    principals-emails: ${POLICY_BUNDLE_PRINCIPALS_EMAILS:}
   seed:
     enabled: ${POLICY_SEED_ENABLED:true}
   ui:

@@ -28,7 +28,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * tokens in the deploy smoke test — it can't be minted offline.)
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "policy.registration.allowed-emails=imdbfed-run@example.iam.gserviceaccount.com")
+        properties = {
+                "policy.registration.allowed-emails=imdbfed-run@example.iam.gserviceaccount.com",
+                "policy.bundle.principals-emails=cosmorouter-run@example.iam.gserviceaccount.com"})
 class RegistrationAuthIT {
 
     static final MongoDBContainer MONGO = new MongoDBContainer(DockerImageName.parse("mongo:8.0"));
@@ -65,6 +67,24 @@ class RegistrationAuthIT {
     void readSurfacesStayOpen() {
         assertThat(rest.getForEntity("/v1/bundle", JsonNode.class).getStatusCode())
                 .isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void anonymousBundleReadersNeverSeePrincipals() {
+        // Map a subject through the (open in this test) admin API...
+        ResponseEntity<JsonNode> updated = rest.exchange(
+                "/v1/admin/personas/analyst", HttpMethod.PUT,
+                new HttpEntity<>(Map.of(
+                        "displayName", "Ratings analyst",
+                        "roles", List.of("analyst"),
+                        "subjects", List.of("someone@gmail.com")), jsonHeaders(null)),
+                JsonNode.class);
+        assertThat(updated.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        // ...and the anonymous bundle still withholds the principals map.
+        JsonNode bundle = rest.getForEntity("/v1/bundle", JsonNode.class).getBody();
+        assertThat(bundle.get("principals")).isEmpty();
+        assertThat(bundle.toString()).doesNotContain("someone@gmail.com");
     }
 
     private static Map<String, Object> payload() {

@@ -309,6 +309,91 @@ async function viewSchema(main) {
   }
 }
 
+// ---------------------------------------------------------------- personas
+function chipEditor(container, items, placeholder) {
+  const render = () => {
+    container.innerHTML = items.map(v =>
+      `<span class="role-chip">${esc(v)}<button data-v="${esc(v)}" title="remove">×</button></span>`).join('')
+      + `<span class="role-add"><input placeholder="${esc(placeholder)}"></span>`;
+    $$('.role-chip button', container).forEach(b => b.onclick = () => {
+      items.splice(items.indexOf(b.dataset.v), 1); render();
+    });
+    const input = $('input', container);
+    input.onkeydown = e => {
+      if (e.key === 'Enter' && input.value.trim()) {
+        if (!items.includes(input.value.trim())) items.push(input.value.trim());
+        render();
+      }
+    };
+  };
+  render();
+}
+
+async function viewPersonas(main) {
+  main.innerHTML = `<div class="view-head">
+    <h2>Personas</h2>
+    <p class="dim">Who is who. A signed-in Google user's role = the persona whose <b>subjects</b> list contains
+    their email — map an email here and the router applies the new roles within one poll interval. A user mapped
+    nowhere has <em>no roles</em> (not even <span class="coord">public</span>) and sees only ungoverned fields.
+    Personas also mint playground tokens carrying their roles directly.</p>
+  </div>`;
+  if (!state.token) {
+    main.insertAdjacentHTML('beforeend', '<div class="notice">Managing personas requires the admin token.</div>');
+    return;
+  }
+
+  const { json: personas } = await api('/v1/admin/personas', { admin: true });
+
+  const savePersona = async (id, displayName, roles, subjects) => {
+    try {
+      await api(`/v1/admin/personas/${encodeURIComponent(id)}`, {
+        method: 'PUT', admin: true,
+        body: { displayName, roles, subjects },
+      });
+      toast(`Saved persona ${id}`);
+      refreshRevision();
+      state.personas = []; // playground picker refreshes next visit
+    } catch (e) { toast(e.message, true); }
+  };
+
+  for (const p of personas) {
+    const roles = [...(p.roles || [])];
+    const subjects = [...(p.subjects || [])];
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <div class="subgraph-head"><h3>${esc(p.id)}</h3>
+        <input class="display-name" value="${esc(p.displayName || '')}" placeholder="display name"
+               style="font:inherit;font-size:13px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink)"></div>
+      <div class="meta" style="margin-bottom:4px">roles (carried in minted tokens)</div>
+      <div class="role-editor roles-editor" style="margin-bottom:10px"></div>
+      <div class="meta" style="margin-bottom:4px">subjects — Google emails mapped to this persona</div>
+      <div class="role-editor subjects-editor" style="margin-bottom:10px"></div>
+      <div class="row-actions"><button class="primary small save">Save</button></div>`;
+    chipEditor($('.roles-editor', card), roles, 'add role…');
+    chipEditor($('.subjects-editor', card), subjects, 'add email…');
+    $('.save', card).onclick = () =>
+      savePersona(p.id, $('.display-name', card).value.trim(), roles, subjects);
+    main.appendChild(card);
+  }
+
+  const create = document.createElement('div');
+  create.className = 'card';
+  create.innerHTML = `
+    <div class="subgraph-head"><h3>New persona</h3></div>
+    <div class="pg-controls">
+      <input class="new-id" placeholder="id (kebab-case)">
+      <button class="primary small create">Create</button>
+    </div>`;
+  $('.create', create).onclick = async () => {
+    const id = $('.new-id', create).value.trim();
+    if (!id) return;
+    await savePersona(id, id, [], []);
+    render();
+  };
+  main.appendChild(create);
+}
+
 // ------------------------------------------------------------------- audit
 async function viewAudit(main) {
   main.innerHTML = `<div class="view-head">
@@ -334,7 +419,7 @@ async function viewAudit(main) {
 }
 
 // ------------------------------------------------------------------- shell
-const VIEWS = { fields: viewFields, subgraphs: viewSubgraphs, playground: viewPlayground, schema: viewSchema, audit: viewAudit };
+const VIEWS = { fields: viewFields, subgraphs: viewSubgraphs, playground: viewPlayground, schema: viewSchema, personas: viewPersonas, audit: viewAudit };
 
 async function render() {
   const main = $('#main');
@@ -346,13 +431,16 @@ async function render() {
 }
 
 function initShell() {
-  // Schema tab is injected here so index.html stays stable if JS fails.
+  // JS-owned tabs are injected here so index.html stays stable if JS fails.
   const tabs = $('#tabs');
-  const schemaTab = document.createElement('button');
-  schemaTab.className = 'tab';
-  schemaTab.dataset.view = 'schema';
-  schemaTab.textContent = 'Schema';
-  tabs.insertBefore(schemaTab, $$('.tab', tabs)[2]);
+  const auditTab = $$('.tab', tabs).find(t => t.dataset.view === 'audit');
+  for (const [view, label] of [['schema', 'Schema'], ['personas', 'Personas']]) {
+    const tab = document.createElement('button');
+    tab.className = 'tab';
+    tab.dataset.view = view;
+    tab.textContent = label;
+    tabs.insertBefore(tab, view === 'schema' ? $$('.tab', tabs)[2] : auditTab);
+  }
 
   $$('.tab').forEach(tab => tab.onclick = () => {
     $$('.tab').forEach(t => t.classList.toggle('active', t === tab));

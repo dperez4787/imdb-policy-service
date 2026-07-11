@@ -39,8 +39,11 @@ public class BundleService {
      * Compiles the current state into a bundle. Revision and content are read
      * non-atomically; a concurrent write can produce a bundle one poll stale,
      * which the router's next poll reconciles.
+     *
+     * @param includePrincipals the principals map carries real emails — only
+     *                          allowlisted callers (the router) receive it.
      */
-    public PolicyBundle build() {
+    public PolicyBundle build(boolean includePrincipals) {
         Map<String, FieldPolicy> policyByCoordinate = policies.findAll().stream()
                 .collect(Collectors.toMap(FieldPolicy::getCoordinate, Function.identity()));
 
@@ -54,6 +57,9 @@ public class BundleService {
         }
 
         Map<String, List<String>> principals = new LinkedHashMap<>();
+        if (!includePrincipals) {
+            return new PolicyBundle(revisions.current(), Instant.now(), DEFAULT_POSTURE, fields, principals);
+        }
         for (Persona persona : personas.findAll()) {
             if (persona.getSubjects() == null) {
                 continue;

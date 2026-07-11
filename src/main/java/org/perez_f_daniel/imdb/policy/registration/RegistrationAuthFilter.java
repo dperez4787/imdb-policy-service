@@ -1,18 +1,11 @@
 package org.perez_f_daniel.imdb.policy.registration;
 
-import com.nimbusds.jose.JWSAlgorithm;
-import com.nimbusds.jose.jwk.source.JWKSource;
-import com.nimbusds.jose.jwk.source.JWKSourceBuilder;
-import com.nimbusds.jose.proc.JWSVerificationKeySelector;
-import com.nimbusds.jose.proc.SecurityContext;
-import com.nimbusds.jwt.JWTClaimsSet;
-import com.nimbusds.jwt.proc.ConfigurableJWTProcessor;
-import com.nimbusds.jwt.proc.DefaultJWTProcessor;
 import jakarta.annotation.PostConstruct;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.perez_f_daniel.imdb.policy.core.GoogleIdentityVerifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,9 +14,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.net.URL;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -39,29 +30,18 @@ import java.util.stream.Collectors;
 public class RegistrationAuthFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(RegistrationAuthFilter.class);
-    private static final String GOOGLE_JWKS = "https://www.googleapis.com/oauth2/v3/certs";
-    private static final Set<String> GOOGLE_ISSUERS =
-            Set.of("https://accounts.google.com", "accounts.google.com");
 
     private final Set<String> allowedEmails;
-    private final String requiredAudience;
-    private final ConfigurableJWTProcessor<SecurityContext> processor;
+    private final GoogleIdentityVerifier verifier;
 
     public RegistrationAuthFilter(
             @Value("${policy.registration.allowed-emails:}") String allowedEmailsCsv,
-            @Value("${policy.registration.audience:}") String requiredAudience) throws Exception {
+            GoogleIdentityVerifier verifier) {
         this.allowedEmails = Arrays.stream(allowedEmailsCsv.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .collect(Collectors.toUnmodifiableSet());
-        this.requiredAudience = requiredAudience == null ? "" : requiredAudience.trim();
-
-        JWKSource<SecurityContext> keySource = JWKSourceBuilder
-                .create(new URL(GOOGLE_JWKS))
-                .build();
-        this.processor = new DefaultJWTProcessor<>();
-        this.processor.setJWSKeySelector(
-                new JWSVerificationKeySelector<>(JWSAlgorithm.RS256, keySource));
+        this.verifier = verifier;
     }
 
     @PostConstruct
@@ -79,36 +59,14 @@ public class RegistrationAuthFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
-        if (allowedEmails.isEmpty() || callerIsAllowed(request)) {
+        boolean allowed = allowedEmails.isEmpty()
+                || verifier.verifiedEmail(request).map(allowedEmails::contains).orElse(false);
+        if (allowed) {
             chain.doFilter(request, response);
             return;
         }
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.getWriter().write("{\"error\":\"a Google-signed ID token from an allowed identity is required\"}");
-    }
-
-    private boolean callerIsAllowed(HttpServletRequest request) {
-        String header = request.getHeader("Authorization");
-        if (header == null || !header.startsWith("Bearer ")) {
-            return false;
-        }
-        try {
-            JWTClaimsSet claims = processor.process(header.substring("Bearer ".length()), null);
-            if (!GOOGLE_ISSUERS.contains(claims.getIssuer())) {
-                return false;
-            }
-            if (!requiredAudience.isEmpty()) {
-                List<String> audience = claims.getAudience();
-                if (audience == null || !audience.contains(requiredAudience)) {
-                    return false;
-                }
-            }
-            String email = claims.getStringClaim("email");
-            return email != null && allowedEmails.contains(email);
-        } catch (Exception e) {
-            log.info("registration token rejected: {}", e.getMessage());
-            return false;
-        }
     }
 }
