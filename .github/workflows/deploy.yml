@@ -84,8 +84,14 @@ jobs:
             --format 'value(status.url)')
           echo "Policy service URL: $URL"
 
-          BUNDLE=$(curl -sf --retry 5 --retry-all-errors --max-time 120 "$URL/v1/bundle")
-          echo "$BUNDLE" | jq -e '.revision >= 1 and .defaultPosture == "allow-unless-governed"'
+          # On a fresh database the demo seed runs moments after the port
+          # opens; poll instead of asserting the first response.
+          for i in $(seq 1 12); do
+            BUNDLE=$(curl -sf --retry 5 --retry-all-errors --max-time 120 "$URL/v1/bundle")
+            echo "$BUNDLE" | jq -e '.revision >= 1 and .defaultPosture == "allow-unless-governed"' && break
+            [ "$i" = "12" ] && { echo "bundle never became ready: $BUNDLE"; exit 1; }
+            sleep 5
+          done
 
           curl -sf "$URL/.well-known/jwks.json" | jq -e '.keys | length >= 1'
 
