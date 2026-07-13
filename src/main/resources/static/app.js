@@ -109,12 +109,17 @@ async function viewFields(main) {
         roles.splice(roles.indexOf(b.dataset.role), 1); renderChips();
       });
       const input = $('input', editor);
-      input.onkeydown = e => {
-        if (e.key === 'Enter' && input.value.trim()) {
-          if (!roles.includes(input.value.trim())) roles.push(input.value.trim());
+      const commit = () => {
+        const value = input.value.trim();
+        if (value) {
+          if (!roles.includes(value)) roles.push(value);
           renderChips();
         }
       };
+      input.onkeydown = e => { if (e.key === 'Enter') commit(); };
+      // Clicking Save blurs the input first — typed-but-unentered text must
+      // never be silently dropped from the grant.
+      input.onblur = commit;
     };
     renderChips();
 
@@ -319,12 +324,17 @@ function chipEditor(container, items, placeholder) {
       items.splice(items.indexOf(b.dataset.v), 1); render();
     });
     const input = $('input', container);
-    input.onkeydown = e => {
-      if (e.key === 'Enter' && input.value.trim()) {
-        if (!items.includes(input.value.trim())) items.push(input.value.trim());
+    const commit = () => {
+      const value = input.value.trim();
+      if (value) {
+        if (!items.includes(value)) items.push(value);
         render();
       }
     };
+    input.onkeydown = e => { if (e.key === 'Enter') commit(); };
+    // Clicking Save blurs the input first — typed-but-unentered text must
+    // never be silently dropped from the persona.
+    input.onblur = commit;
   };
   render();
 }
