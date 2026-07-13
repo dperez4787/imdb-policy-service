@@ -12,6 +12,15 @@ Part of the governance architecture spanning
 [cosmo-router](https://github.com/dperez4787/cosmo-router) (enforces the
 bundle in its `fieldauth` module): **declare at the edge, decide at the
 center, enforce at the gate.**
+## Live UIs
+
+Every user-facing surface in this system, live:
+
+| Surface | URL |
+|---|---|
+| **Marquee** — the IMDb browser | https://dfp-imdb-browser.web.app/titles |
+| **IMDb Graph Governance** — field-level policy control plane | https://imdb-policy-service-dkuqnmldta-uc.a.run.app/ |
+| **linear-example** — records app + the engineering blog | https://project-d60a83c1-2c60-4d51-ad0.web.app/ · [blog](https://project-d60a83c1-2c60-4d51-ad0.web.app/blog) |
 
 ## API
 
